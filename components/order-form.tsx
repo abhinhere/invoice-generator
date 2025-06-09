@@ -4,6 +4,7 @@ import { useState } from "react"
 import { format } from "date-fns"
 import { CalendarIcon, Plus, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { PDFDownloadLink } from "@react-pdf/renderer"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,6 +13,7 @@ import { Label } from "@/components/ui/label"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ThreeDElement } from "@/components/three-d-element"
+import { InvoicePDF } from "./pdf-invoice"
 
 // Define the item interface
 interface OrderItem {
@@ -26,6 +28,7 @@ export default function OrderForm() {
   const [date, setDate] = useState<Date>(new Date())
   const [items, setItems] = useState<OrderItem[]>([{ id: "1", name: "", quantity: 1, rate: 0 }])
   const [discount, setDiscount] = useState(0)
+  const [isPdfReady, setIsPdfReady] = useState(false)
 
   // Add a new item to the list
   const addItem = () => {
@@ -71,6 +74,22 @@ export default function OrderForm() {
       currency: "INR",
       maximumFractionDigits: 2,
     }).format(amount)
+  }
+
+  // Prepare invoice data for PDF
+  const invoiceData = {
+    customerName,
+    date,
+    items,
+    discount,
+    subtotal,
+    discountAmount,
+    total,
+  }
+
+  // Handle generate invoice button click
+  const handleGenerateInvoice = () => {
+    setIsPdfReady(true)
   }
 
   return (
@@ -203,7 +222,24 @@ export default function OrderForm() {
             <span>Total:</span>
             <span>{formatCurrency(total)}</span>
           </div>
-          <Button className="w-full mt-4">Generate Invoice</Button>
+
+          {isPdfReady ? (
+            <PDFDownloadLink
+              document={<InvoicePDF data={invoiceData} />}
+              fileName={`invoice-${format(date, "yyyyMMdd")}.pdf`}
+              className="w-full"
+            >
+              {({ blob, url, loading, error }) => (
+                <Button className="w-full" disabled={loading}>
+                  {loading ? "Preparing PDF..." : "Download Invoice PDF"}
+                </Button>
+              )}
+            </PDFDownloadLink>
+          ) : (
+            <Button className="w-full mt-4" onClick={handleGenerateInvoice}>
+              Generate Invoice
+            </Button>
+          )}
         </CardFooter>
       </Card>
 
