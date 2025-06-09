@@ -4,7 +4,7 @@ import { useState } from "react"
 import { format } from "date-fns"
 import { CalendarIcon, Plus, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { PDFDownloadLink } from "@react-pdf/renderer"
+import dynamic from "next/dynamic"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -13,7 +13,11 @@ import { Label } from "@/components/ui/label"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ThreeDElement } from "@/components/three-d-element"
-import { InvoicePDF } from "./pdf-invoice"
+
+// Dynamically import the PDF download button with no SSR
+const PdfDownloadButton = dynamic(() => import("./pdf-download-button"), {
+  ssr: false,
+})
 
 // Define the item interface
 interface OrderItem {
@@ -28,7 +32,6 @@ export default function OrderForm() {
   const [date, setDate] = useState<Date>(new Date())
   const [items, setItems] = useState<OrderItem[]>([{ id: "1", name: "", quantity: 1, rate: 0 }])
   const [discount, setDiscount] = useState(0)
-  const [isPdfReady, setIsPdfReady] = useState(false)
 
   // Add a new item to the list
   const addItem = () => {
@@ -87,11 +90,6 @@ export default function OrderForm() {
     total,
   }
 
-  // Handle generate invoice button click
-  const handleGenerateInvoice = () => {
-    setIsPdfReady(true)
-  }
-
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <Card className="lg:col-span-2">
@@ -137,7 +135,8 @@ export default function OrderForm() {
               </Button>
             </div>
 
-            <div className="flex items-center gap-3 p-3 text-sm font-medium text-gray-600 border-b">
+            {/* Desktop Header - Hidden on Mobile */}
+            <div className="hidden md:flex items-center gap-3 p-3 text-sm font-medium text-gray-600 border-b">
               <div className="flex-1">Item Name</div>
               <div className="w-20 text-center">Qty</div>
               <div className="w-24 text-center">Rate (₹)</div>
@@ -147,49 +146,116 @@ export default function OrderForm() {
 
             <div className="space-y-4">
               {items.map((item) => (
-                <div key={item.id} className="flex items-center gap-3 p-3 border rounded-lg bg-gray-50">
-                  <div className="flex-1 min-w-0">
-                    <Input
-                      value={item.name}
-                      onChange={(e) => updateItem(item.id, "name", e.target.value)}
-                      placeholder="Item name"
-                      className="border-0 bg-transparent p-0 focus-visible:ring-0"
-                    />
+                <div key={item.id} className="border rounded-lg bg-gray-50 overflow-hidden">
+                  {/* Mobile Layout - Stacked */}
+                  <div className="md:hidden p-4 space-y-3">
+                    <div className="space-y-2">
+                      <Label htmlFor={`item-name-${item.id}`} className="text-sm text-gray-600">
+                        Item Name
+                      </Label>
+                      <Input
+                        id={`item-name-${item.id}`}
+                        value={item.name}
+                        onChange={(e) => updateItem(item.id, "name", e.target.value)}
+                        placeholder="Item name"
+                        className="border-gray-300"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label htmlFor={`item-qty-${item.id}`} className="text-sm text-gray-600">
+                          Quantity
+                        </Label>
+                        <Input
+                          id={`item-qty-${item.id}`}
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(e) => updateItem(item.id, "quantity", Number.parseInt(e.target.value) || 0)}
+                          placeholder="Qty"
+                          className="text-center border-gray-300"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor={`item-rate-${item.id}`} className="text-sm text-gray-600">
+                          Rate (₹)
+                        </Label>
+                        <Input
+                          id={`item-rate-${item.id}`}
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={item.rate}
+                          onChange={(e) => updateItem(item.id, "rate", Number.parseFloat(e.target.value) || 0)}
+                          placeholder="Rate"
+                          className="text-center border-gray-300"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-gray-200">
+                      <div className="text-sm text-gray-600">Total:</div>
+                      <div className="font-medium text-green-600">{formatCurrency(item.quantity * item.rate)}</div>
+                    </div>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full text-red-500 hover:text-red-700 hover:bg-red-50 mt-2"
+                      onClick={() => removeItem(item.id)}
+                      disabled={items.length === 1}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Remove Item
+                    </Button>
                   </div>
-                  <div className="w-20">
-                    <Input
-                      type="number"
-                      min="1"
-                      value={item.quantity}
-                      onChange={(e) => updateItem(item.id, "quantity", Number.parseInt(e.target.value) || 0)}
-                      placeholder="Qty"
-                      className="text-center"
-                    />
+
+                  {/* Desktop Layout - Horizontal */}
+                  <div className="hidden md:flex items-center gap-3 p-3">
+                    <div className="flex-1 min-w-0">
+                      <Input
+                        value={item.name}
+                        onChange={(e) => updateItem(item.id, "name", e.target.value)}
+                        placeholder="Item name"
+                        className="border-0 bg-transparent p-0 focus-visible:ring-0"
+                      />
+                    </div>
+                    <div className="w-20">
+                      <Input
+                        type="number"
+                        min="1"
+                        value={item.quantity}
+                        onChange={(e) => updateItem(item.id, "quantity", Number.parseInt(e.target.value) || 0)}
+                        placeholder="Qty"
+                        className="text-center"
+                      />
+                    </div>
+                    <div className="w-24">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={item.rate}
+                        onChange={(e) => updateItem(item.id, "rate", Number.parseFloat(e.target.value) || 0)}
+                        placeholder="Rate"
+                        className="text-center"
+                      />
+                    </div>
+                    <div className="w-28 text-right font-medium text-green-600">
+                      {formatCurrency(item.quantity * item.rate)}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-red-500 hover:text-red-700 hover:bg-red-50 flex-shrink-0"
+                      onClick={() => removeItem(item.id)}
+                      disabled={items.length === 1}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span className="sr-only">Remove item</span>
+                    </Button>
                   </div>
-                  <div className="w-24">
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={item.rate}
-                      onChange={(e) => updateItem(item.id, "rate", Number.parseFloat(e.target.value) || 0)}
-                      placeholder="Rate"
-                      className="text-center"
-                    />
-                  </div>
-                  <div className="w-28 text-right font-medium text-green-600">
-                    {formatCurrency(item.quantity * item.rate)}
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-red-500 hover:text-red-700 hover:bg-red-50 flex-shrink-0"
-                    onClick={() => removeItem(item.id)}
-                    disabled={items.length === 1}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    <span className="sr-only">Remove item</span>
-                  </Button>
                 </div>
               ))}
             </div>
@@ -223,23 +289,7 @@ export default function OrderForm() {
             <span>{formatCurrency(total)}</span>
           </div>
 
-          {isPdfReady ? (
-            <PDFDownloadLink
-              document={<InvoicePDF data={invoiceData} />}
-              fileName={`invoice-${format(date, "yyyyMMdd")}.pdf`}
-              className="w-full"
-            >
-              {({ blob, url, loading, error }) => (
-                <Button className="w-full" disabled={loading}>
-                  {loading ? "Preparing PDF..." : "Download Invoice PDF"}
-                </Button>
-              )}
-            </PDFDownloadLink>
-          ) : (
-            <Button className="w-full mt-4" onClick={handleGenerateInvoice}>
-              Generate Invoice
-            </Button>
-          )}
+          <PdfDownloadButton invoiceData={invoiceData} />
         </CardFooter>
       </Card>
 
