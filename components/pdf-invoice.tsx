@@ -261,12 +261,12 @@ export const InvoicePDF = ({ data }: { data: InvoiceData }) => {
     <Document>
       <Page size="A4" style={styles.page}>
         {/* Watermark */}
-        <Image style={styles.watermark} src="/madelogo.png" />
+        <Image style={styles.watermark} src="/logo.png" />
 
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Image style={styles.logo} src="/madelogo.png" />
+            <Image style={styles.logo} src="/logo.png" />
           </View>
           <View style={styles.companyInfo}>
             <Text style={styles.title}>INVOICE</Text>
@@ -342,7 +342,7 @@ export const InvoicePDF = ({ data }: { data: InvoiceData }) => {
           <Text style={styles.thankYou}>Thank you for your order!</Text>
           <Text style={styles.footerText}>This is a computer-generated invoice and does not require a signature.</Text>
           <Text style={styles.footerText}>
-            For any queries, please contact us at www.madeproducts.in | +91 85899 07591
+            For any queries, please contact us at www.abc.in | +91 99XXX XXXXX
           </Text>
         </View>
       </Page>
