@@ -28,5 +28,5 @@ A simple and efficient Invoice Generator web app built with **Next.js**, **Tailw
 ### 1. Clone the Repo
 
 ```bash
-git clone https://github.com/abhinhere/invoice-generator.git
+git clone https://github.com/<your-username>/invoice-generator.git
 cd invoice-generator
