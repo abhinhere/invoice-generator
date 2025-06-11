@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { format } from "date-fns"
 import { pdf } from "@react-pdf/renderer"
 import { InvoicePDF } from "./pdf-invoice"
-import { Share2, Download, Mail, MessageCircle, Copy, Check, Send } from "lucide-react"
+import { Share2, Download, Mail, MessageCircle, Copy, Check, Send, FolderOpen, RotateCcw } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,6 +14,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
 import { toast } from "@/hooks/use-toast"
+import InvoiceCounter from "@/utils/invoice-counter"
 
 interface OrderItem {
   id: string
@@ -30,6 +31,7 @@ interface InvoiceData {
   subtotal: number
   discountAmount: number
   total: number
+  invoiceNumber?: string
 }
 
 export default function PdfDownloadButton({ invoiceData }: { invoiceData: InvoiceData }) {
@@ -38,9 +40,14 @@ export default function PdfDownloadButton({ invoiceData }: { invoiceData: Invoic
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null)
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [savedToFolder, setSavedToFolder] = useState(false)
+  const [currentInvoiceNumber, setCurrentInvoiceNumber] = useState<string>("")
 
   useEffect(() => {
     setIsClient(true)
+    if (typeof window !== "undefined") {
+      setCurrentInvoiceNumber(InvoiceCounter.getCurrentInvoiceNumber())
+    }
   }, [])
 
   // Cleanup URL when component unmounts
@@ -51,6 +58,68 @@ export default function PdfDownloadButton({ invoiceData }: { invoiceData: Invoic
       }
     }
   }, [pdfUrl])
+
+  const saveToInvoiceFolder = async (blob: Blob, filename: string) => {
+    try {
+      // Check if File System Access API is supported
+      if ("showDirectoryPicker" in window) {
+        try {
+          // Try to get or create the Invoice Generator folder
+          const directoryHandle = await (window as any).showDirectoryPicker({
+            mode: "readwrite",
+            startIn: "downloads",
+          })
+
+          // Create the file in the selected directory
+          const fileHandle = await directoryHandle.getFileHandle(filename, {
+            create: true,
+          })
+
+          const writable = await fileHandle.createWritable()
+          await writable.write(blob)
+          await writable.close()
+
+          toast({
+            title: "Saved to Folder",
+            description: `PDF saved to the selected folder as ${filename}`,
+          })
+          setSavedToFolder(true)
+          return true
+        } catch (error) {
+          // User cancelled or error occurred, fall back to regular download
+          console.log("Directory picker cancelled or failed:", error)
+        }
+      }
+
+      // Fallback: Regular download with suggested folder structure
+      const link = document.createElement("a")
+      link.href = URL.createObjectURL(blob)
+      link.download = filename
+
+      // Add download attribute to suggest folder structure
+      link.setAttribute("download", `Invoice Generator/${filename}`)
+
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(link.href)
+
+      toast({
+        title: "PDF Downloaded",
+        description: `${filename} downloaded to your Downloads folder. Consider organizing it in an "Invoice Generator" folder.`,
+      })
+      setSavedToFolder(true)
+      return true
+    } catch (error) {
+      console.error("Error saving PDF:", error)
+      toast({
+        title: "Save Failed",
+        description: "Unable to save PDF to folder. Please try manual download.",
+        variant: "destructive",
+      })
+      return false
+    }
+  }
 
   const generatePdf = async () => {
     if (!isClient) return
@@ -63,8 +132,17 @@ export default function PdfDownloadButton({ invoiceData }: { invoiceData: Invoic
         throw new Error("Invoice data is missing")
       }
 
+      // Generate new sequential invoice number
+      const invoiceNumber = InvoiceCounter.generateInvoiceNumber()
+
+      // Add invoice number to invoice data
+      const invoiceDataWithNumber = {
+        ...invoiceData,
+        invoiceNumber,
+      }
+
       // Create PDF with validated data
-      const pdfDoc = <InvoicePDF data={invoiceData} />
+      const pdfDoc = <InvoicePDF data={invoiceDataWithNumber} />
       const blob = await pdf(pdfDoc).toBlob()
 
       // Store the blob and create URL for sharing
@@ -72,10 +150,28 @@ export default function PdfDownloadButton({ invoiceData }: { invoiceData: Invoic
       const url = URL.createObjectURL(blob)
       setPdfUrl(url)
 
-      toast({
-        title: "PDF Generated Successfully!",
-        description: "Your invoice is ready. You can now download or share it.",
-      })
+      // Generate filename with invoice number and customer name
+      const customerName = invoiceData.customerName || "Customer"
+      const dateStr = format(invoiceData.date || new Date(), "yyyy-MM-dd")
+      const filename = `${invoiceNumber}_${customerName.replace(/[^a-zA-Z0-9]/g, "_")}_${dateStr}.pdf`
+
+      // Automatically save to Invoice Generator folder
+      const saved = await saveToInvoiceFolder(blob, filename)
+
+      // Update current invoice number display
+      setCurrentInvoiceNumber(InvoiceCounter.getCurrentInvoiceNumber())
+
+      if (saved) {
+        toast({
+          title: "Invoice Generated & Saved!",
+          description: `Invoice ${invoiceNumber} has been generated and saved to the Invoice Generator folder.`,
+        })
+      } else {
+        toast({
+          title: "Invoice Generated!",
+          description: `Invoice ${invoiceNumber} is ready. You can now download or share it.`,
+        })
+      }
     } catch (error) {
       console.error("Error generating PDF:", error)
       toast({
@@ -88,12 +184,51 @@ export default function PdfDownloadButton({ invoiceData }: { invoiceData: Invoic
     }
   }
 
+  const resetInvoiceCounter = () => {
+    InvoiceCounter.resetCounter()
+    setCurrentInvoiceNumber(InvoiceCounter.getCurrentInvoiceNumber())
+    toast({
+      title: "Counter Reset",
+      description: "Invoice counter has been reset to 0001.",
+    })
+  }
+
+  const openInvoiceFolder = async () => {
+    try {
+      if ("showDirectoryPicker" in window) {
+        await (window as any).showDirectoryPicker({
+          mode: "read",
+          startIn: "downloads",
+        })
+        toast({
+          title: "Folder Opened",
+          description: "You can now view your saved invoices.",
+        })
+      } else {
+        toast({
+          title: "Feature Not Supported",
+          description: "Your browser doesn't support folder access. Check your Downloads folder.",
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Cannot Open Folder",
+        description: "Please manually navigate to your Downloads/Invoice Generator folder.",
+      })
+    }
+  }
+
   const downloadPdf = () => {
-    if (!pdfUrl) return
+    if (!pdfUrl || !pdfBlob) return
+
+    const customerName = invoiceData.customerName || "Customer"
+    const dateStr = format(invoiceData.date || new Date(), "yyyy-MM-dd")
+    const invoiceNumber = currentInvoiceNumber || "INV-0001"
+    const filename = `${invoiceNumber}_${customerName.replace(/[^a-zA-Z0-9]/g, "_")}_${dateStr}.pdf`
 
     const link = document.createElement("a")
     link.href = pdfUrl
-    link.download = `invoice-${format(invoiceData.date || new Date(), "yyyyMMdd")}.pdf`
+    link.download = filename
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -108,16 +243,21 @@ export default function PdfDownloadButton({ invoiceData }: { invoiceData: Invoic
     if (!pdfBlob) return
 
     try {
+      const customerName = invoiceData.customerName || "Customer"
+      const dateStr = format(invoiceData.date || new Date(), "yyyy-MM-dd")
+      const invoiceNumber = currentInvoiceNumber || "INV-0001"
+      const filename = `${invoiceNumber}_${customerName.replace(/[^a-zA-Z0-9]/g, "_")}_${dateStr}.pdf`
+
       // Create a File object from the blob
-      const file = new File([pdfBlob], `invoice-${format(invoiceData.date || new Date(), "yyyyMMdd")}.pdf`, {
+      const file = new File([pdfBlob], filename, {
         type: "application/pdf",
       })
 
       // Check if the browser supports the Web Share API with files
       if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
-          title: `Invoice - ${invoiceData.customerName || "Customer"}`,
-          text: `Invoice for ${format(invoiceData.date || new Date(), "dd/MM/yyyy")} - Total: ${new Intl.NumberFormat(
+          title: `Invoice ${invoiceNumber} - ${invoiceData.customerName || "Customer"}`,
+          text: `Invoice ${invoiceNumber} for ${format(invoiceData.date || new Date(), "dd/MM/yyyy")} - Total: ${new Intl.NumberFormat(
             "en-IN",
             {
               style: "currency",
@@ -133,12 +273,13 @@ export default function PdfDownloadButton({ invoiceData }: { invoiceData: Invoic
         })
       } else {
         // Fallback: Create a mailto link and download the file
-        const subject = `Invoice - ${format(invoiceData.date || new Date(), "dd/MM/yyyy")}`
+        const subject = `Invoice ${invoiceNumber} - ${format(invoiceData.date || new Date(), "dd/MM/yyyy")}`
         const body = `Dear ${invoiceData.customerName || "Customer"},
 
 Please find the attached invoice for your recent purchase.
 
 Invoice Details:
+- Invoice Number: ${invoiceNumber}
 - Date: ${format(invoiceData.date || new Date(), "dd MMMM yyyy")}
 - Total Amount: ${new Intl.NumberFormat("en-IN", {
           style: "currency",
@@ -178,16 +319,21 @@ MADE PRODUCT`
     if (!pdfBlob) return
 
     try {
+      const customerName = invoiceData.customerName || "Customer"
+      const dateStr = format(invoiceData.date || new Date(), "yyyy-MM-dd")
+      const invoiceNumber = currentInvoiceNumber || "INV-0001"
+      const filename = `${invoiceNumber}_${customerName.replace(/[^a-zA-Z0-9]/g, "_")}_${dateStr}.pdf`
+
       // Create a File object from the blob
-      const file = new File([pdfBlob], `invoice-${format(invoiceData.date || new Date(), "yyyyMMdd")}.pdf`, {
+      const file = new File([pdfBlob], filename, {
         type: "application/pdf",
       })
 
       // Check if the browser supports the Web Share API with files
       if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
-          title: `Invoice - ${invoiceData.customerName || "Customer"}`,
-          text: `📄 Invoice PDF\n\nCustomer: ${invoiceData.customerName || "Customer"}\nDate: ${format(
+          title: `Invoice ${invoiceNumber} - ${invoiceData.customerName || "Customer"}`,
+          text: `📄 Invoice PDF\n\nInvoice: ${invoiceNumber}\nCustomer: ${invoiceData.customerName || "Customer"}\nDate: ${format(
             invoiceData.date || new Date(),
             "dd/MM/yyyy",
           )}\nTotal: ${new Intl.NumberFormat("en-IN", {
@@ -207,6 +353,7 @@ MADE PRODUCT`
 
         const message = `📄 *Invoice PDF*
 
+Invoice: ${invoiceNumber}
 Customer: ${invoiceData.customerName || "Customer"}
 Date: ${format(invoiceData.date || new Date(), "dd/MM/yyyy")}
 Total: ${new Intl.NumberFormat("en-IN", {
@@ -247,7 +394,12 @@ Please find the invoice PDF in your downloads folder.`
     }
 
     try {
-      const file = new File([pdfBlob], `invoice-${format(invoiceData.date || new Date(), "yyyyMMdd")}.pdf`, {
+      const customerName = invoiceData.customerName || "Customer"
+      const dateStr = format(invoiceData.date || new Date(), "yyyy-MM-dd")
+      const invoiceNumber = currentInvoiceNumber || "INV-0001"
+      const filename = `${invoiceNumber}_${customerName.replace(/[^a-zA-Z0-9]/g, "_")}_${dateStr}.pdf`
+
+      const file = new File([pdfBlob], filename, {
         type: "application/pdf",
       })
 
@@ -262,11 +414,14 @@ Please find the invoice PDF in your downloads folder.`
       }
 
       await navigator.share({
-        title: "Invoice PDF",
-        text: `Invoice for ${invoiceData.customerName || "Customer"} - ${new Intl.NumberFormat("en-IN", {
-          style: "currency",
-          currency: "INR",
-        }).format(invoiceData.total)}`,
+        title: `Invoice ${invoiceNumber}`,
+        text: `Invoice ${invoiceNumber} for ${invoiceData.customerName || "Customer"} - ${new Intl.NumberFormat(
+          "en-IN",
+          {
+            style: "currency",
+            currency: "INR",
+          },
+        ).format(invoiceData.total)}`,
         files: [file],
       })
 
@@ -325,15 +480,20 @@ Please find the invoice PDF in your downloads folder.`
     if (!pdfBlob) return
 
     try {
+      const customerName = invoiceData.customerName || "Customer"
+      const dateStr = format(invoiceData.date || new Date(), "yyyy-MM-dd")
+      const invoiceNumber = currentInvoiceNumber || "INV-0001"
+      const filename = `${invoiceNumber}_${customerName.replace(/[^a-zA-Z0-9]/g, "_")}_${dateStr}.pdf`
+
       // Create a File object from the blob
-      const file = new File([pdfBlob], `invoice-${format(invoiceData.date || new Date(), "yyyyMMdd")}.pdf`, {
+      const file = new File([pdfBlob], filename, {
         type: "application/pdf",
       })
 
       // Try to use Web Share API first
       if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
-          title: `Invoice - ${invoiceData.customerName || "Customer"}`,
+          title: `Invoice ${invoiceNumber} - ${invoiceData.customerName || "Customer"}`,
           files: [file],
         })
 
@@ -371,60 +531,83 @@ Please find the invoice PDF in your downloads folder.`
 
   if (!pdfBlob) {
     return (
-      <Button className="w-full mt-4" onClick={generatePdf} disabled={isGenerating}>
-        {isGenerating ? "Generating PDF..." : "Generate Invoice"}
-      </Button>
+      <div className="space-y-2 mt-4">
+        <div className="flex items-center justify-between text-sm text-gray-600">
+          <span>Next Invoice Number:</span>
+          <span className="font-mono font-bold">{currentInvoiceNumber}</span>
+        </div>
+        <div className="flex gap-2">
+          <Button onClick={generatePdf} disabled={isGenerating} className="flex-1">
+            {isGenerating ? "Generating PDF..." : "Generate & Save Invoice"}
+          </Button>
+          <Button variant="outline" size="icon" onClick={resetInvoiceCounter} title="Reset Counter">
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="text-xs text-gray-500 text-center">
+          Total Invoices Generated: {InvoiceCounter.getTotalInvoicesGenerated()}
+        </div>
+      </div>
     )
   }
 
   return (
-    <div className="flex flex-col sm:flex-row gap-2 mt-4">
-      <Button onClick={downloadPdf} className="flex-1">
-        <Download className="h-4 w-4 mr-2" />
-        Download PDF
-      </Button>
+    <div className="flex flex-col gap-2 mt-4">
+      <div className="flex flex-col sm:flex-row gap-2">
+        <Button onClick={downloadPdf} className="flex-1">
+          <Download className="h-4 w-4 mr-2" />
+          Download PDF
+        </Button>
 
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="flex-1 sm:flex-initial">
-            <Send className="h-4 w-4 mr-2" />
-            Send PDF
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-56">
-          {navigator.share && (
-            <>
-              <DropdownMenuItem onClick={shareViaNativeAPI}>
-                <Share2 className="h-4 w-4 mr-2" />
-                Share PDF via Apps
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-            </>
-          )}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="flex-1 sm:flex-initial">
+              <Send className="h-4 w-4 mr-2" />
+              Send PDF
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            {navigator.share && (
+              <>
+                <DropdownMenuItem onClick={shareViaNativeAPI}>
+                  <Share2 className="h-4 w-4 mr-2" />
+                  Share PDF via Apps
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
 
-          <DropdownMenuItem onClick={shareViaEmail}>
-            <Mail className="h-4 w-4 mr-2" />
-            Send via Email
-          </DropdownMenuItem>
+            <DropdownMenuItem onClick={shareViaEmail}>
+              <Mail className="h-4 w-4 mr-2" />
+              Send via Email
+            </DropdownMenuItem>
 
-          <DropdownMenuItem onClick={shareViaWhatsApp}>
-            <MessageCircle className="h-4 w-4 mr-2" />
-            Send via WhatsApp
-          </DropdownMenuItem>
+            <DropdownMenuItem onClick={shareViaWhatsApp}>
+              <MessageCircle className="h-4 w-4 mr-2" />
+              Send via WhatsApp
+            </DropdownMenuItem>
 
-          <DropdownMenuItem onClick={sendViaMessenger}>
-            <Send className="h-4 w-4 mr-2" />
-            Send via Messenger
-          </DropdownMenuItem>
+            <DropdownMenuItem onClick={sendViaMessenger}>
+              <Send className="h-4 w-4 mr-2" />
+              Send via Messenger
+            </DropdownMenuItem>
 
-          <DropdownMenuSeparator />
+            <DropdownMenuSeparator />
 
-          <DropdownMenuItem onClick={copyPdfAsDataUrl}>
-            {copied ? <Check className="h-4 w-4 mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
-            {copied ? "Copied!" : "Copy PDF Data"}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+            <DropdownMenuItem onClick={copyPdfAsDataUrl}>
+              {copied ? <Check className="h-4 w-4 mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
+              {copied ? "Copied!" : "Copy PDF Data"}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {savedToFolder && (
+        <Button variant="ghost" size="sm" onClick={openInvoiceFolder} className="text-sm">
+          <FolderOpen className="h-4 w-4 mr-2" />
+          Open Invoice Folder
+        </Button>
+      )}
     </div>
   )
 }

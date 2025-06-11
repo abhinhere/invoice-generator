@@ -1,12 +1,6 @@
 import { Document, Page, Text, View, StyleSheet, Image } from "@react-pdf/renderer"
 import { format } from "date-fns"
 
-
-// Format RS in Indian Rupees
-  const RS = (amount: number) => {
-  return 'Rs. ' + amount.toFixed(2); // manually prefix
-}
-
 // Define types
 interface OrderItem {
   id: string
@@ -23,6 +17,7 @@ interface InvoiceData {
   subtotal: number
   discountAmount: number
   total: number
+  invoiceNumber?: string // Add optional invoice number
 }
 
 // Create enhanced styles
@@ -39,7 +34,7 @@ const styles = StyleSheet.create({
     top: "50%",
     left: "50%",
     transform: "translate(-50%, -50%) rotate(-45deg)",
-    opacity: 0.005,
+    opacity: 0.05,
     width: 300,
     height: 300,
     zIndex: -1,
@@ -53,8 +48,8 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   logo: {
-    width: 82,
-    height: 90,
+    width: 80,
+    height: 80,
   },
   companyInfo: {
     flexDirection: "column",
@@ -235,7 +230,17 @@ const styles = StyleSheet.create({
   },
 })
 
-
+// Format currency in Indian Rupees
+const formatCurrency = (amount: number) => {
+  if (typeof amount !== "number" || isNaN(amount)) {
+    return "₹0.00"
+  }
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 2,
+  }).format(amount)
+}
 
 // Validate and sanitize invoice data
 const validateInvoiceData = (data: InvoiceData) => {
@@ -247,31 +252,29 @@ const validateInvoiceData = (data: InvoiceData) => {
     subtotal: typeof data?.subtotal === "number" ? data.subtotal : 0,
     discountAmount: typeof data?.discountAmount === "number" ? data.discountAmount : 0,
     total: typeof data?.total === "number" ? data.total : 0,
+    invoiceNumber: data?.invoiceNumber || "INV-0001",
   }
 }
 
 // Create PDF Document
 export const InvoicePDF = ({ data }: { data: InvoiceData }) => {
   const validatedData = validateInvoiceData(data)
-  const invoiceNumber = `INV-${format(validatedData.date, "yyyyMMdd")}-${Math.floor(Math.random() * 1000)
-    .toString()
-    .padStart(3, "0")}`
 
   return (
     <Document>
       <Page size="A4" style={styles.page}>
         {/* Watermark */}
-        <Image style={styles.watermark} src="/logo.png" />
+        <Image style={styles.watermark} src="/images/made-logo.png" />
 
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Image style={styles.logo} src="/logo.png" />
+            <Image style={styles.logo} src="/images/made-logo.png" />
           </View>
           <View style={styles.companyInfo}>
             <Text style={styles.title}>INVOICE</Text>
-            <Text style={styles.subtitle}>Invoice no :</Text>
-            <Text style={styles.invoiceNumber}>{invoiceNumber}</Text>
+            <Text style={styles.subtitle}>Professional Invoice System</Text>
+            <Text style={styles.invoiceNumber}>{validatedData.invoiceNumber}</Text>
           </View>
         </View>
 
@@ -284,8 +287,14 @@ export const InvoicePDF = ({ data }: { data: InvoiceData }) => {
           </View>
           <View style={styles.infoColumn}>
             <Text style={styles.sectionTitle}>Invoice Details</Text>
+            <Text style={styles.infoLabel}>Invoice Number</Text>
+            <Text style={styles.infoValue}>{validatedData.invoiceNumber}</Text>
             <Text style={styles.infoLabel}>Invoice Date</Text>
             <Text style={styles.infoValue}>{format(validatedData.date, "dd MMMM yyyy")}</Text>
+            <Text style={styles.infoLabel}>Due Date</Text>
+            <Text style={styles.infoValue}>
+              {format(new Date(validatedData.date.getTime() + 30 * 24 * 60 * 60 * 1000), "dd MMMM yyyy")}
+            </Text>
           </View>
         </View>
 
@@ -303,9 +312,9 @@ export const InvoicePDF = ({ data }: { data: InvoiceData }) => {
               <View key={item?.id || index} style={index % 2 === 0 ? styles.tableRow : styles.tableRowAlt}>
                 <Text style={[styles.tableText, styles.tableColName]}>{item?.name || "Unnamed Item"}</Text>
                 <Text style={[styles.tableText, styles.tableColQty]}>{item?.quantity || 0}</Text>
-                <Text style={[styles.tableText, styles.tableColRate]}>{(item?.rate || 0)}</Text>
+                <Text style={[styles.tableText, styles.tableColRate]}>{formatCurrency(item?.rate || 0)}</Text>
                 <Text style={[styles.tableText, styles.tableColTotal]}>
-                  {RS((item?.quantity || 0) * (item?.rate || 0))}
+                  {formatCurrency((item?.quantity || 0) * (item?.rate || 0))}
                 </Text>
               </View>
             ))
@@ -324,15 +333,15 @@ export const InvoicePDF = ({ data }: { data: InvoiceData }) => {
           <View style={styles.summaryContainer}>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Subtotal</Text>
-              <Text style={styles.summaryValue}>{RS(validatedData.subtotal)}</Text>
+              <Text style={styles.summaryValue}>{formatCurrency(validatedData.subtotal)}</Text>
             </View>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Discount ({validatedData.discount}%)</Text>
-              <Text style={styles.summaryValue}>- {RS(validatedData.discountAmount)}</Text>
+              <Text style={styles.summaryValue}>- {formatCurrency(validatedData.discountAmount)}</Text>
             </View>
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Total Amount</Text>
-              <Text style={styles.totalValue}>{RS(validatedData.total)}</Text>
+              <Text style={styles.totalValue}>{formatCurrency(validatedData.total)}</Text>
             </View>
           </View>
         </View>
@@ -342,7 +351,7 @@ export const InvoicePDF = ({ data }: { data: InvoiceData }) => {
           <Text style={styles.thankYou}>Thank you for your order!</Text>
           <Text style={styles.footerText}>This is a computer-generated invoice and does not require a signature.</Text>
           <Text style={styles.footerText}>
-            For any queries, please contact us at www.abc.in | +91 99XXX XXXXX
+            For any queries, please contact us at support@abc.com | +91 755XX XXXXX
           </Text>
         </View>
       </Page>

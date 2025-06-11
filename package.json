@@ -67,6 +67,7 @@
     "three": "latest",
     "vaul": "^0.9.6",
     "zod": "^3.24.1"
+
   },
   "devDependencies": {
     "@types/node": "^22.15.30",
