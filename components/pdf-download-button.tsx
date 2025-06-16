@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { format } from "date-fns"
 import { pdf } from "@react-pdf/renderer"
 import { InvoicePDF } from "./pdf-invoice"
-import { Share2, Download, Mail, MessageCircle, Copy, Check, Send, FolderOpen, RotateCcw, Printer } from "lucide-react"
+import { Share2, Download, Mail, MessageCircle, Copy, Check, Send, FolderOpen, Printer } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,7 +15,6 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
 import { toast } from "@/hooks/use-toast"
-import InvoiceCounter from "@/utils/invoice-counter"
 
 interface OrderItem {
   id: string
@@ -42,13 +41,9 @@ export default function PdfDownloadButton({ invoiceData }: { invoiceData: Invoic
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [savedToFolder, setSavedToFolder] = useState(false)
-  const [currentInvoiceNumber, setCurrentInvoiceNumber] = useState<string>("")
 
   useEffect(() => {
     setIsClient(true)
-    if (typeof window !== "undefined") {
-      setCurrentInvoiceNumber(InvoiceCounter.getCurrentInvoiceNumber())
-    }
   }, [])
 
   // Cleanup URL when component unmounts
@@ -122,72 +117,6 @@ export default function PdfDownloadButton({ invoiceData }: { invoiceData: Invoic
     }
   }
 
-  const generatePdf = async () => {
-    if (!isClient) return
-
-    try {
-      setIsGenerating(true)
-
-      // Validate data before generating PDF
-      if (!invoiceData) {
-        throw new Error("Invoice data is missing")
-      }
-
-      // Generate new sequential invoice number
-      const invoiceNumber = InvoiceCounter.generateInvoiceNumber()
-
-      // Add invoice number to invoice data
-      const invoiceDataWithNumber = {
-        ...invoiceData,
-        invoiceNumber,
-      }
-
-      // Save invoice to database
-      await saveInvoiceToDatabase(invoiceDataWithNumber)
-
-      // Create PDF with validated data
-      const pdfDoc = <InvoicePDF data={invoiceDataWithNumber} />
-      const blob = await pdf(pdfDoc).toBlob()
-
-      // Store the blob and create URL for sharing
-      setPdfBlob(blob)
-      const url = URL.createObjectURL(blob)
-      setPdfUrl(url)
-
-      // Generate filename with invoice number and customer name
-      const customerName = invoiceData.customerName || "Customer"
-      const dateStr = format(invoiceData.date || new Date(), "yyyy-MM-dd")
-      const filename = `${invoiceNumber}_${customerName.replace(/[^a-zA-Z0-9]/g, "_")}_${dateStr}.pdf`
-
-      // Automatically save to Invoice Generator folder
-      const saved = await saveToInvoiceFolder(blob, filename)
-
-      // Update current invoice number display
-      setCurrentInvoiceNumber(InvoiceCounter.getCurrentInvoiceNumber())
-
-      if (saved) {
-        toast({
-          title: "Invoice Generated & Saved!",
-          description: `Invoice ${invoiceNumber} has been generated, saved to database, and saved to the Invoice Generator folder.`,
-        })
-      } else {
-        toast({
-          title: "Invoice Generated!",
-          description: `Invoice ${invoiceNumber} is ready and saved to database. You can now download or share it.`,
-        })
-      }
-    } catch (error) {
-      console.error("Error generating PDF:", error)
-      toast({
-        title: "Error",
-        description: "Failed to generate PDF. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsGenerating(false)
-    }
-  }
-
   const saveInvoiceToDatabase = async (invoiceDataWithNumber: any) => {
     try {
       const response = await fetch("/api/invoices", {
@@ -215,22 +144,103 @@ export default function PdfDownloadButton({ invoiceData }: { invoiceData: Invoic
       })
 
       if (response.ok) {
-        console.log("Invoice saved to Supabase successfully")
+        const result = await response.json()
+        console.log("Invoice saved to Supabase successfully:", result)
+        return result
       } else {
-        console.error("Failed to save invoice to Supabase")
+        const errorData = await response.json()
+        console.error("Failed to save invoice to Supabase:", errorData)
+        throw new Error(errorData.error || "Failed to save invoice")
       }
     } catch (error) {
       console.error("Error saving invoice to Supabase:", error)
+      // Don't throw the error to prevent PDF generation from failing
+      // Just log it and continue with PDF generation
+      toast({
+        title: "Database Warning",
+        description: "Invoice PDF generated but may not be saved to database. Please check your connection.",
+        variant: "destructive",
+      })
+      return null
     }
   }
 
-  const resetInvoiceCounter = () => {
-    InvoiceCounter.resetCounter()
-    setCurrentInvoiceNumber(InvoiceCounter.getCurrentInvoiceNumber())
-    toast({
-      title: "Counter Reset",
-      description: "Invoice counter has been reset to 0001.",
-    })
+  const generateInvoiceNumber = () => {
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = String(now.getMonth() + 1).padStart(2, "0")
+    const day = String(now.getDate()).padStart(2, "0")
+    const time = String(now.getHours()).padStart(2, "0") + String(now.getMinutes()).padStart(2, "0")
+    return `INV-${year}${month}${day}-${time}`
+  }
+
+  const generatePdf = async () => {
+    if (!isClient) return
+
+    try {
+      setIsGenerating(true)
+
+      // Validate data before generating PDF
+      if (!invoiceData) {
+        throw new Error("Invoice data is missing")
+      }
+
+      // Generate new sequential invoice number
+      const invoiceNumber = generateInvoiceNumber()
+
+      // Add invoice number to invoice data
+      const invoiceDataWithNumber = {
+        ...invoiceData,
+        invoiceNumber,
+      }
+
+      // Try to save invoice to database (non-blocking)
+      const dbResult = await saveInvoiceToDatabase(invoiceDataWithNumber)
+
+      // Create PDF with validated data regardless of database save result
+      const pdfDoc = <InvoicePDF data={invoiceDataWithNumber} />
+      const blob = await pdf(pdfDoc).toBlob()
+
+      // Store the blob and create URL for sharing
+      setPdfBlob(blob)
+      const url = URL.createObjectURL(blob)
+      setPdfUrl(url)
+
+      // Generate filename with invoice number and customer name
+      const customerName = invoiceData.customerName || "Customer"
+      const dateStr = format(invoiceData.date || new Date(), "yyyy-MM-dd")
+      const filename = `${invoiceNumber}_${customerName.replace(/[^a-zA-Z0-9]/g, "_")}_${dateStr}.pdf`
+
+      // Automatically save to Invoice Generator folder
+      const saved = await saveToInvoiceFolder(blob, filename)
+
+      // Show appropriate success message
+      if (dbResult && saved) {
+        toast({
+          title: "Invoice Generated & Saved!",
+          description: `Invoice ${invoiceNumber} has been generated, saved to database, and saved to the Invoice Generator folder.`,
+        })
+      } else if (saved) {
+        toast({
+          title: "Invoice Generated!",
+          description: `Invoice ${invoiceNumber} PDF generated and saved locally. Database save may have failed.`,
+        })
+      } else {
+        toast({
+          title: "Invoice Generated!",
+          description: `Invoice ${invoiceNumber} is ready. You can now download or share it.`,
+        })
+      }
+    } catch (error) {
+      console.error("Error generating PDF:", error)
+      toast({
+        title: "Error",
+        description: "Failed to generate PDF. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsGenerating(false)
+    }
   }
 
   const openInvoiceFolder = async () => {
@@ -263,7 +273,7 @@ export default function PdfDownloadButton({ invoiceData }: { invoiceData: Invoic
 
     const customerName = invoiceData.customerName || "Customer"
     const dateStr = format(invoiceData.date || new Date(), "yyyy-MM-dd")
-    const invoiceNumber = currentInvoiceNumber || "INV-0001"
+    const invoiceNumber = invoiceData.invoiceNumber || "INV-0001"
     const filename = `${invoiceNumber}_${customerName.replace(/[^a-zA-Z0-9]/g, "_")}_${dateStr}.pdf`
 
     const link = document.createElement("a")
@@ -285,7 +295,7 @@ export default function PdfDownloadButton({ invoiceData }: { invoiceData: Invoic
     try {
       const customerName = invoiceData.customerName || "Customer"
       const dateStr = format(invoiceData.date || new Date(), "yyyy-MM-dd")
-      const invoiceNumber = currentInvoiceNumber || "INV-0001"
+      const invoiceNumber = invoiceData.invoiceNumber || "INV-0001"
       const filename = `${invoiceNumber}_${customerName.replace(/[^a-zA-Z0-9]/g, "_")}_${dateStr}.pdf`
 
       // Create a File object from the blob
@@ -361,7 +371,7 @@ MADE PRODUCT`
     try {
       const customerName = invoiceData.customerName || "Customer"
       const dateStr = format(invoiceData.date || new Date(), "yyyy-MM-dd")
-      const invoiceNumber = currentInvoiceNumber || "INV-0001"
+      const invoiceNumber = invoiceData.invoiceNumber || "INV-0001"
       const filename = `${invoiceNumber}_${customerName.replace(/[^a-zA-Z0-9]/g, "_")}_${dateStr}.pdf`
 
       // Create a File object from the blob
@@ -436,7 +446,7 @@ Please find the invoice PDF in your downloads folder.`
     try {
       const customerName = invoiceData.customerName || "Customer"
       const dateStr = format(invoiceData.date || new Date(), "yyyy-MM-dd")
-      const invoiceNumber = currentInvoiceNumber || "INV-0001"
+      const invoiceNumber = invoiceData.invoiceNumber || "INV-0001"
       const filename = `${invoiceNumber}_${customerName.replace(/[^a-zA-Z0-9]/g, "_")}_${dateStr}.pdf`
 
       const file = new File([pdfBlob], filename, {
@@ -522,7 +532,7 @@ Please find the invoice PDF in your downloads folder.`
     try {
       const customerName = invoiceData.customerName || "Customer"
       const dateStr = format(invoiceData.date || new Date(), "yyyy-MM-dd")
-      const invoiceNumber = currentInvoiceNumber || "INV-0001"
+      const invoiceNumber = invoiceData.invoiceNumber || "INV-0001"
       const filename = `${invoiceNumber}_${customerName.replace(/[^a-zA-Z0-9]/g, "_")}_${dateStr}.pdf`
 
       // Create a File object from the blob
@@ -609,21 +619,9 @@ Please find the invoice PDF in your downloads folder.`
   if (!pdfBlob) {
     return (
       <div className="space-y-2 mt-4">
-        <div className="flex items-center justify-between text-sm text-gray-600">
-          <span>Next Invoice Number:</span>
-          <span className="font-mono font-bold">{currentInvoiceNumber}</span>
-        </div>
-        <div className="flex gap-2">
-          <Button onClick={generatePdf} disabled={isGenerating} className="flex-1">
-            {isGenerating ? "Generating PDF..." : "Generate & Save Invoice"}
-          </Button>
-          <Button variant="outline" size="icon" onClick={resetInvoiceCounter} title="Reset Counter">
-            <RotateCcw className="h-4 w-4" />
-          </Button>
-        </div>
-        <div className="text-xs text-gray-500 text-center">
-          Total Invoices Generated: {InvoiceCounter.getTotalInvoicesGenerated()}
-        </div>
+        <Button onClick={generatePdf} disabled={isGenerating} className="flex-1">
+          {isGenerating ? "Generating PDF..." : "Generate & Save Invoice"}
+        </Button>
       </div>
     )
   }
