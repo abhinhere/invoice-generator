@@ -2,7 +2,7 @@
 
 import { useRef, useState, Suspense } from "react"
 import { Canvas, useFrame } from "@react-three/fiber"
-import { OrbitControls, Environment } from "@react-three/drei"
+import { OrbitControls, Environment, Text } from "@react-three/drei"
 import type { Group } from "three"
 
 function Calculator() {
@@ -41,6 +41,17 @@ function Calculator() {
         <meshStandardMaterial color="#10B981" emissive="#10B981" emissiveIntensity={0.3} />
       </mesh>
 
+      {/* Display text */}
+      <Text
+        position={[0.6, 0.8, 0.2]}
+        fontSize={0.15}
+        color="#FFFFFF"
+        anchorX="right"
+        anchorY="middle"
+      >
+        ₹1,234.56
+      </Text>
+
       {/* Calculator buttons - Row 1 */}
       <group position={[0, 0.2, 0.16]}>
         {/* Clear button */}
@@ -48,64 +59,115 @@ function Calculator() {
           <boxGeometry args={[0.25, 0.25, 0.08]} />
           <meshStandardMaterial color="#EF4444" metalness={0.2} roughness={0.3} />
         </mesh>
+        <Text position={[-0.6, 0.3, 0.05]} fontSize={0.08} color="white" anchorX="center" anchorY="middle">
+          C
+        </Text>
 
         {/* Division button */}
         <mesh position={[-0.2, 0.3, 0]}>
           <boxGeometry args={[0.25, 0.25, 0.08]} />
           <meshStandardMaterial color="#F59E0B" metalness={0.2} roughness={0.3} />
         </mesh>
+        <Text position={[-0.2, 0.3, 0.05]} fontSize={0.08} color="white" anchorX="center" anchorY="middle">
+          ÷
+        </Text>
 
         {/* Multiplication button */}
         <mesh position={[0.2, 0.3, 0]}>
           <boxGeometry args={[0.25, 0.25, 0.08]} />
           <meshStandardMaterial color="#F59E0B" metalness={0.2} roughness={0.3} />
         </mesh>
+        <Text position={[0.2, 0.3, 0.05]} fontSize={0.08} color="white" anchorX="center" anchorY="middle">
+          ×
+        </Text>
 
         {/* Minus button */}
         <mesh position={[0.6, 0.3, 0]}>
           <boxGeometry args={[0.25, 0.25, 0.08]} />
           <meshStandardMaterial color="#F59E0B" metalness={0.2} roughness={0.3} />
         </mesh>
+        <Text position={[0.6, 0.3, 0.05]} fontSize={0.08} color="white" anchorX="center" anchorY="middle">
+          -
+        </Text>
       </group>
 
       {/* Calculator buttons - Row 2 */}
       <group position={[0, -0.1, 0.16]}>
         {[7, 8, 9].map((num, index) => (
-          <mesh key={num} position={[-0.6 + index * 0.4, 0, 0]}>
-            <boxGeometry args={[0.25, 0.25, 0.08]} />
-            <meshStandardMaterial color="#374151" metalness={0.2} roughness={0.3} />
-          </mesh>
+          <group key={num}>
+            <mesh position={[-0.6 + index * 0.4, 0, 0]}>
+              <boxGeometry args={[0.25, 0.25, 0.08]} />
+              <meshStandardMaterial color="#374151" metalness={0.2} roughness={0.3} />
+            </mesh>
+            <Text
+              position={[-0.6 + index * 0.4, 0, 0.05]}
+              fontSize={0.08}
+              color="white"
+              anchorX="center"
+              anchorY="middle"
+            >
+              {num}
+            </Text>
+          </group>
         ))}
         {/* Plus button */}
         <mesh position={[0.6, 0, 0]}>
           <boxGeometry args={[0.25, 0.55, 0.08]} />
           <meshStandardMaterial color="#F59E0B" metalness={0.2} roughness={0.3} />
         </mesh>
+        <Text position={[0.6, 0, 0.05]} fontSize={0.08} color="white" anchorX="center" anchorY="middle">
+          +
+        </Text>
       </group>
 
       {/* Calculator buttons - Row 3 */}
       <group position={[0, -0.4, 0.16]}>
         {[4, 5, 6].map((num, index) => (
-          <mesh key={num} position={[-0.6 + index * 0.4, 0, 0]}>
-            <boxGeometry args={[0.25, 0.25, 0.08]} />
-            <meshStandardMaterial color="#374151" metalness={0.2} roughness={0.3} />
-          </mesh>
+          <group key={num}>
+            <mesh position={[-0.6 + index * 0.4, 0, 0]}>
+              <boxGeometry args={[0.25, 0.25, 0.08]} />
+              <meshStandardMaterial color="#374151" metalness={0.2} roughness={0.3} />
+            </mesh>
+            <Text
+              position={[-0.6 + index * 0.4, 0, 0.05]}
+              fontSize={0.08}
+              color="white"
+              anchorX="center"
+              anchorY="middle"
+            >
+              {num}
+            </Text>
+          </group>
         ))}
       </group>
 
       {/* Calculator buttons - Row 4 */}
       <group position={[0, -0.7, 0.16]}>
         {[1, 2, 3].map((num, index) => (
-          <mesh key={num} position={[-0.6 + index * 0.4, 0, 0]}>
-            <boxGeometry args={[0.25, 0.25, 0.08]} />
-            <meshStandardMaterial color="#374151" metalness={0.2} roughness={0.3} />
-          </mesh>
+          <group key={num}>
+            <mesh position={[-0.6 + index * 0.4, 0, 0]}>
+              <boxGeometry args={[0.25, 0.25, 0.08]} />
+              <meshStandardMaterial color="#374151" metalness={0.2} roughness={0.3} />
+            </mesh>
+            <Text
+              position={[-0.6 + index * 0.4, 0, 0.05]}
+              fontSize={0.08}
+              color="white"
+              anchorX="center"
+              anchorY="middle"
+            >
+              {num}
+            </Text>
+          </group>
         ))}
         {/* Equals button */}
         <mesh position={[0.6, 0, 0]}>
           <boxGeometry args={[0.25, 0.55, 0.08]} />
           <meshStandardMaterial color="#10B981" metalness={0.2} roughness={0.3} />
         </mesh>
+        <Text position={[0.6, 0, 0.05]} fontSize={0.08} color="white" anchorX="center" anchorY="middle">
+          =
+        </Text>
       </group>
 
       {/* Calculator buttons - Row 5 (0 and decimal) */}
@@ -115,19 +177,19 @@ function Calculator() {
           <boxGeometry args={[0.55, 0.25, 0.08]} />
           <meshStandardMaterial color="#374151" metalness={0.2} roughness={0.3} />
         </mesh>
+        <Text position={[-0.4, 0, 0.05]} fontSize={0.08} color="white" anchorX="center" anchorY="middle">
+          0
+        </Text>
 
         {/* Decimal button */}
         <mesh position={[0.2, 0, 0]}>
           <boxGeometry args={[0.25, 0.25, 0.08]} />
           <meshStandardMaterial color="#374151" metalness={0.2} roughness={0.3} />
         </mesh>
+        <Text position={[0.2, 0, 0.05]} fontSize={0.08} color="white" anchorX="center" anchorY="middle">
+          .
+        </Text>
       </group>
-
-      {/* Calculator brand/logo area */}
-      <mesh position={[0, -1.2, 0.16]}>
-        <boxGeometry args={[1.8, 0.15, 0.02]} />
-        <meshStandardMaterial color="#4A5568" metalness={0.3} roughness={0.4} />
-      </mesh>
     </group>
   )
 }
