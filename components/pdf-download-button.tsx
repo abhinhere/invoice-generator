@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { format } from "date-fns"
 import { pdf } from "@react-pdf/renderer"
 import { InvoicePDF } from "./pdf-invoice"
-import { Share2, Download, Mail, MessageCircle, Copy, Check, Send, FolderOpen, Printer } from "lucide-react"
+import { Share2, Download, Mail, MessageCircle, Copy, Check, Send, Printer } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,7 +40,6 @@ export default function PdfDownloadButton({ invoiceData }: { invoiceData: Invoic
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null)
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  const [savedToFolder, setSavedToFolder] = useState(false)
 
   useEffect(() => {
     setIsClient(true)
@@ -54,68 +53,6 @@ export default function PdfDownloadButton({ invoiceData }: { invoiceData: Invoic
       }
     }
   }, [pdfUrl])
-
-  const saveToInvoiceFolder = async (blob: Blob, filename: string) => {
-    try {
-      // Check if File System Access API is supported
-      if ("showDirectoryPicker" in window) {
-        try {
-          // Try to get or create the Invoice Generator folder
-          const directoryHandle = await (window as any).showDirectoryPicker({
-            mode: "readwrite",
-            startIn: "downloads",
-          })
-
-          // Create the file in the selected directory
-          const fileHandle = await directoryHandle.getFileHandle(filename, {
-            create: true,
-          })
-
-          const writable = await fileHandle.createWritable()
-          await writable.write(blob)
-          await writable.close()
-
-          toast({
-            title: "Saved to Folder",
-            description: `PDF saved to the selected folder as ${filename}`,
-          })
-          setSavedToFolder(true)
-          return true
-        } catch (error) {
-          // User cancelled or error occurred, fall back to regular download
-          console.log("Directory picker cancelled or failed:", error)
-        }
-      }
-
-      // Fallback: Regular download with suggested folder structure
-      const link = document.createElement("a")
-      link.href = URL.createObjectURL(blob)
-      link.download = filename
-
-      // Add download attribute to suggest folder structure
-      link.setAttribute("download", `Invoice Generator/${filename}`)
-
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      URL.revokeObjectURL(link.href)
-
-      toast({
-        title: "PDF Downloaded",
-        description: `${filename} downloaded to your Downloads folder. Consider organizing it in an "Invoice Generator" folder.`,
-      })
-      setSavedToFolder(true)
-      return true
-    } catch (error) {
-      console.error("Error saving PDF:", error)
-      toast({
-        title: "Save Failed",
-        description: "Unable to save PDF to folder. Please try manual download.",
-        variant: "destructive",
-      })
-      return false
-    }
-  }
 
   const saveInvoiceToDatabase = async (invoiceDataWithNumber: any) => {
     try {
@@ -154,8 +91,6 @@ export default function PdfDownloadButton({ invoiceData }: { invoiceData: Invoic
       }
     } catch (error) {
       console.error("Error saving invoice to Supabase:", error)
-      // Don't throw the error to prevent PDF generation from failing
-      // Just log it and continue with PDF generation
       toast({
         title: "Database Warning",
         description: "Invoice PDF generated but may not be saved to database. Please check your connection.",
@@ -185,7 +120,7 @@ export default function PdfDownloadButton({ invoiceData }: { invoiceData: Invoic
         throw new Error("Invoice data is missing")
       }
 
-      // Generate new sequential invoice number
+      // Generate new invoice number
       const invoiceNumber = generateInvoiceNumber()
 
       // Add invoice number to invoice data
@@ -211,24 +146,24 @@ export default function PdfDownloadButton({ invoiceData }: { invoiceData: Invoic
       const dateStr = format(invoiceData.date || new Date(), "yyyy-MM-dd")
       const filename = `${invoiceNumber}_${customerName.replace(/[^a-zA-Z0-9]/g, "_")}_${dateStr}.pdf`
 
-      // Automatically save to Invoice Generator folder
-      const saved = await saveToInvoiceFolder(blob, filename)
+      // Automatically download the PDF
+      const link = document.createElement("a")
+      link.href = url
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
 
       // Show appropriate success message
-      if (dbResult && saved) {
+      if (dbResult) {
         toast({
           title: "Invoice Generated & Saved!",
-          description: `Invoice ${invoiceNumber} has been generated, saved to database, and saved to the Invoice Generator folder.`,
-        })
-      } else if (saved) {
-        toast({
-          title: "Invoice Generated!",
-          description: `Invoice ${invoiceNumber} PDF generated and saved locally. Database save may have failed.`,
+          description: `Invoice ${invoiceNumber} has been generated, saved to database, and downloaded.`,
         })
       } else {
         toast({
           title: "Invoice Generated!",
-          description: `Invoice ${invoiceNumber} is ready. You can now download or share it.`,
+          description: `Invoice ${invoiceNumber} PDF generated and downloaded. Database save may have failed.`,
         })
       }
     } catch (error) {
@@ -240,31 +175,6 @@ export default function PdfDownloadButton({ invoiceData }: { invoiceData: Invoic
       })
     } finally {
       setIsGenerating(false)
-    }
-  }
-
-  const openInvoiceFolder = async () => {
-    try {
-      if ("showDirectoryPicker" in window) {
-        await (window as any).showDirectoryPicker({
-          mode: "read",
-          startIn: "downloads",
-        })
-        toast({
-          title: "Folder Opened",
-          description: "You can now view your saved invoices.",
-        })
-      } else {
-        toast({
-          title: "Feature Not Supported",
-          description: "Your browser doesn't support folder access. Check your Downloads folder.",
-        })
-      }
-    } catch (error) {
-      toast({
-        title: "Cannot Open Folder",
-        description: "Please manually navigate to your Downloads/Invoice Generator folder.",
-      })
     }
   }
 
@@ -619,8 +529,8 @@ Please find the invoice PDF in your downloads folder.`
   if (!pdfBlob) {
     return (
       <div className="space-y-2 mt-4">
-        <Button onClick={generatePdf} disabled={isGenerating} className="flex-1">
-          {isGenerating ? "Generating PDF..." : "Generate & Save Invoice"}
+        <Button onClick={generatePdf} disabled={isGenerating} className="w-full">
+          {isGenerating ? "Generating PDF..." : "Generate & Download Invoice"}
         </Button>
       </div>
     )
@@ -681,13 +591,6 @@ Please find the invoice PDF in your downloads folder.`
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-
-      {savedToFolder && (
-        <Button variant="ghost" size="sm" onClick={openInvoiceFolder} className="text-sm">
-          <FolderOpen className="h-4 w-4 mr-2" />
-          Open Invoice Folder
-        </Button>
-      )}
     </div>
   )
 }
